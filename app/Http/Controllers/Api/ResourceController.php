@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,6 +34,16 @@ abstract class ResourceController extends Controller
     protected function defaults(Request $request): array
     {
         return [];
+    }
+
+    /**
+     * Narrows the index listing with the filters a resource supports.
+     *
+     * @param  Builder<Model>  $query
+     */
+    protected function filter(Builder $query, Request $request): void
+    {
+        //
     }
 
     /**
@@ -72,6 +83,8 @@ abstract class ResourceController extends Controller
                 }
             }
         }
+
+        $this->filter($query, $request);
 
         $direction = strtolower($request->input('direction', 'asc')) === 'desc' ? 'desc' : 'asc';
         $sortBy = $request->input('sort_by', 'id');

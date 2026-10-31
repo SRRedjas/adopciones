@@ -37,7 +37,9 @@ class Adoption extends Model
         return [
             // sqlsrv returns foreign keys as strings and the workflow compares them strictly
             'pet_id' => 'integer',
+            'person_id' => 'integer',
             'adoption_status_id' => 'integer',
+            'user_id' => 'integer',
             'holds_pet' => 'boolean',
             'requested_at' => 'date:Y-m-d',
             'approved_at' => 'date:Y-m-d',

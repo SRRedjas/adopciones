@@ -61,10 +61,11 @@ test('administrators can open every module', function () {
 });
 
 test('the api applies the same permissions', function () {
-    Sanctum::actingAs(userWithRole('Recepcionista'));
+    $receptionist = userWithRole('Recepcionista');
+    Sanctum::actingAs($receptionist);
 
     $this->getJson('/api/adoptions')->assertOk();
-    $this->getJson('/api/pets')->assertForbidden();
+    $this->postJson('/api/pets')->assertForbidden();
     $this->getJson('/api/users')->assertForbidden();
-    $this->putJson('/api/users/1/roles', ['role_ids' => []])->assertForbidden();
+    $this->putJson("/api/users/{$receptionist->id}/roles", ['role_ids' => []])->assertForbidden();
 });

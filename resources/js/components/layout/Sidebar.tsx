@@ -23,7 +23,7 @@ interface NavItem {
     name: string;
     path: string;
     icon: React.ComponentType<{ className?: string }>;
-    allowedRoles?: string[];
+    requiredPermissions?: string[];
 }
 
 export interface SidebarProps {
@@ -32,7 +32,7 @@ export interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseMobile }) => {
-    const { user, hasAnyRole, primaryRole } = useAuth();
+    const { user, hasAnyPermission, hasPermission, primaryRole } = useAuth();
 
     // Cerrar con Escape si está abierto en móvil
     useEffect(() => {
@@ -50,77 +50,77 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
             name: 'Dashboard',
             path: '/admin/dashboard',
             icon: LayoutDashboard,
-            allowedRoles: ['Administrador', 'Veterinario', 'Recepcionista', 'Voluntario'],
+            requiredPermissions: ['manage_pets', 'manage_adoptions', 'manage_appointments', 'manage_donations', 'manage_treatments', 'manage_rescues', 'manage_users', 'manage_catalogs', 'view_reports'],
         },
         {
             name: 'Catálogo de Mascotas',
             path: '/admin/pets',
             icon: PawPrint,
-            allowedRoles: ['Administrador', 'Veterinario', 'Recepcionista', 'Voluntario'],
+            requiredPermissions: ['manage_pets'],
         },
         {
             name: 'Rescates y Entradas',
             path: '/admin/rescues',
             icon: HeartHandshake,
-            allowedRoles: ['Administrador', 'Veterinario', 'Voluntario'],
+            requiredPermissions: ['manage_rescues'],
         },
         {
             name: 'Registros Médicos',
             path: '/admin/medical',
             icon: Stethoscope,
-            allowedRoles: ['Administrador', 'Veterinario', 'Recepcionista'],
+            requiredPermissions: ['manage_treatments', 'manage_appointments', 'manage_pets'],
         },
         {
             name: 'Solicitudes y Adopciones',
             path: '/admin/adoptions',
             icon: FileText,
-            allowedRoles: ['Administrador', 'Recepcionista'],
+            requiredPermissions: ['manage_adoptions'],
         },
         {
             name: 'Contratos',
             path: '/admin/contracts',
             icon: FileCheck2,
-            allowedRoles: ['Administrador', 'Recepcionista'],
+            requiredPermissions: ['manage_adoptions'],
         },
         {
             name: 'Post-Adopción',
             path: '/admin/follow-ups',
             icon: CalendarHeart,
-            allowedRoles: ['Administrador', 'Veterinario', 'Voluntario'],
+            requiredPermissions: ['manage_adoptions'],
         },
         {
             name: 'Donaciones y Donantes',
             path: '/admin/donations',
             icon: HandHeart,
-            allowedRoles: ['Administrador', 'Recepcionista'],
+            requiredPermissions: ['manage_donations'],
         },
         {
             name: 'Personas y Solicitantes',
             path: '/admin/people',
             icon: Users,
-            allowedRoles: ['Administrador', 'Recepcionista'],
+            requiredPermissions: ['manage_adoptions'],
         },
         {
             name: 'Refugios y Sedes',
             path: '/admin/shelters',
             icon: Building2,
-            allowedRoles: ['Administrador'],
+            requiredPermissions: ['manage_catalogs'],
         },
         {
             name: 'Usuarios y Permisos',
             path: '/admin/users',
             icon: Shield,
-            allowedRoles: ['Administrador'],
+            requiredPermissions: ['manage_users'],
         },
     ];
 
-    // Filtrar elementos de acuerdo a los roles asignados al usuario
+    // Filtrar elementos con los mismos permisos que exige la API
     const visibleNavItems = navItems.filter((item) => {
-        if (!item.allowedRoles || item.allowedRoles.length === 0) return true;
-        return hasAnyRole(item.allowedRoles);
+        if (!item.requiredPermissions || item.requiredPermissions.length === 0) return true;
+        return hasAnyPermission(item.requiredPermissions);
     });
 
-    const canSeeSettings = hasAnyRole(['Administrador']);
+    const canSeeSettings = hasPermission('manage_catalogs');
 
     const getRoleBadgeVariant = (role: string): 'success' | 'info' | 'warning' | 'neutral' => {
         const lower = role.toLowerCase();

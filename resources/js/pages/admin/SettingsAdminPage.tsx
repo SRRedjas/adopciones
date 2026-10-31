@@ -87,9 +87,11 @@ export const SettingsAdminPage: React.FC = () => {
     const petStatusColumns: Column<PetStatus>[] = [
         { header: 'ID', accessorKey: 'id', className: 'w-16 font-mono text-xs' },
         { header: 'Estado del Animal', accessorKey: 'name', className: 'font-bold text-gray-900' },
+        { header: 'Adoptable', cell: (s) => <span className="text-xs">{s.is_adoptable ? 'Sí' : 'No'}</span> },
     ];
     const petStatusFields: FieldConfig[] = [
         { name: 'name', label: 'Nombre del Estado', required: true, placeholder: 'En cuarentena, Disponible, En tratamiento...' },
+        { name: 'is_adoptable', label: 'Se puede adoptar en este estado', type: 'checkbox' },
     ];
 
     // 5. Estados de Adopción

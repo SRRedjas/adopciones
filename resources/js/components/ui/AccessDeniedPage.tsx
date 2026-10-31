@@ -6,15 +6,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Badge } from './Badge';
 
 interface AccessDeniedPageProps {
-    requiredRoles?: string[];
     moduleName?: string;
 }
 
 export const AccessDeniedPage: React.FC<AccessDeniedPageProps> = ({
-    requiredRoles,
     moduleName = 'esta sección',
 }) => {
-    const { user, primaryRole, logout } = useAuth();
+    const { user, primaryRole, logout, homePath } = useAuth();
     const navigate = useNavigate();
 
     const handleLogout = async () => {
@@ -50,18 +48,10 @@ export const AccessDeniedPage: React.FC<AccessDeniedPageProps> = ({
                         <span className="text-gray-500">Rol asignado:</span>
                         <Badge variant="info">{primaryRole}</Badge>
                     </div>
-                    {requiredRoles && requiredRoles.length > 0 && (
-                        <div className="flex justify-between items-center pt-2 border-t border-gray-200">
-                            <span className="text-gray-500">Roles requeridos:</span>
-                            <span className="font-semibold text-emerald-800">
-                                {requiredRoles.join(', ')}
-                            </span>
-                        </div>
-                    )}
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                    <Link to="/admin/dashboard" className="w-full sm:w-auto">
+                    <Link to={homePath} className="w-full sm:w-auto">
                         <Button
                             variant="primary"
                             size="sm"

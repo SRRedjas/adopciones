@@ -29,8 +29,13 @@ import { Input } from '../../components/ui/Input';
 import { Pagination } from '../../components/ui/Pagination';
 import { SkeletonPetCard } from '../../components/ui/Skeleton';
 import { api } from '../../api/client';
+import { useAuth } from '../../hooks/useAuth';
+import { Link } from 'react-router-dom';
 
 export const PetCatalogPage: React.FC = () => {
+    const { user, hasPermission } = useAuth();
+    const isAdopter = hasPermission('adopt');
+
     const {
         items: pets,
         pagination,
@@ -40,6 +45,7 @@ export const PetCatalogPage: React.FC = () => {
     } = useResource<Pet>({
         endpoint: 'pets',
         perPage: 24,
+        initialParams: { available: 1 },
     });
 
     // Catálogo de sedes para filtro
@@ -67,6 +73,7 @@ export const PetCatalogPage: React.FC = () => {
     const [submittedAdoptionId, setSubmittedAdoptionId] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [needsProfile, setNeedsProfile] = useState(false);
 
     // Cargar lista de sedes
     useEffect(() => {
@@ -195,13 +202,25 @@ export const PetCatalogPage: React.FC = () => {
     const handleAdoptSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitError(null);
+        setNeedsProfile(false);
         setIsSubmitting(true);
 
         try {
+            if (isAdopter) {
+                const adoption = await api.post('my/adoptions', {
+                    pet_id: selectedPet?.id,
+                    notes: applicantNotes.trim() || null,
+                });
+
+                setSubmittedAdoptionId(adoption?.id || null);
+                setAdoptionSuccess(true);
+                return;
+            }
+
             const res = await api.post('public/adoptions', {
                 pet_id: selectedPet?.id,
-                name: applicantName.trim(),
-                email: applicantEmail.trim(),
+                name: user ? user.name.slice(0, 50) : applicantName.trim(),
+                email: user ? user.email : applicantEmail.trim(),
                 phone: applicantPhone.trim(),
                 document_number: applicantDocument.trim(),
                 notes: applicantNotes.trim() || 'Solicitud registrada desde el catálogo web público con expediente revisado.',
@@ -210,6 +229,7 @@ export const PetCatalogPage: React.FC = () => {
             setSubmittedAdoptionId(res?.adoption?.id || null);
             setAdoptionSuccess(true);
         } catch (err: any) {
+            setNeedsProfile(Boolean(err?.errors?.profile));
             setSubmitError(err?.message || 'Error al enviar la solicitud. Por favor verifica tus datos.');
         } finally {
             setIsSubmitting(false);
@@ -239,7 +259,7 @@ export const PetCatalogPage: React.FC = () => {
                     <div className="flex items-center gap-4 bg-white/10 p-4 rounded-xl backdrop-blur-xs border border-white/15">
                         <div className="text-center px-2">
                             <p className="text-2xl font-black text-white">{pagination.total || pets.length}</p>
-                            <p className="text-[11px] font-medium text-emerald-100">Albergados</p>
+                            <p className="text-[11px] font-medium text-emerald-100">En Adopción</p>
                         </div>
                         <div className="h-8 w-px bg-white/20" />
                         <div className="text-center px-2">
@@ -673,14 +693,25 @@ export const PetCatalogPage: React.FC = () => {
                                         )}
                                         <p className="text-xs text-gray-600 max-w-md mx-auto leading-relaxed">
                                             Hemos recibido tu postulación para adoptar a{' '}
-                                            <strong className="text-gray-900">{selectedPet.name}</strong>. Nuestro equipo evaluador revisará tu perfil socioeconómico y se comunicará a{' '}
-                                            <span className="font-semibold text-gray-800">{applicantEmail}</span> o al teléfono{' '}
-                                            <span className="font-semibold text-gray-800">{applicantPhone}</span> para coordinar la entrevista.
+                                            <strong className="text-gray-900">{selectedPet.name}</strong>. Nuestro equipo evaluador revisará tu perfil socioeconómico
+                                            {isAdopter ? ' y verás el avance en Mis Solicitudes.' : (
+                                                <>
+                                                    {' '}y se comunicará a{' '}
+                                                    <span className="font-semibold text-gray-800">{user?.email ?? applicantEmail}</span> o al teléfono{' '}
+                                                    <span className="font-semibold text-gray-800">{applicantPhone}</span> para coordinar la entrevista.
+                                                </>
+                                            )}
                                         </p>
                                         <div className="pt-2">
-                                            <Button onClick={() => setIsDossierModalOpen(false)}>
-                                                Aceptar y Cerrar
-                                            </Button>
+                                            {isAdopter ? (
+                                                <Link to="/mis-solicitudes">
+                                                    <Button>Ver Mis Solicitudes</Button>
+                                                </Link>
+                                            ) : (
+                                                <Button onClick={() => setIsDossierModalOpen(false)}>
+                                                    Aceptar y Cerrar
+                                                </Button>
+                                            )}
                                         </div>
                                     </div>
                                 ) : (
@@ -688,6 +719,11 @@ export const PetCatalogPage: React.FC = () => {
                                         {submitError && (
                                             <div className="rounded-md bg-red-50 p-3 text-xs text-red-700 border border-red-200">
                                                 {submitError}
+                                                {needsProfile && (
+                                                    <Link to="/mi-perfil" className="ml-1 font-bold underline">
+                                                        Completar mis datos
+                                                    </Link>
+                                                )}
                                             </div>
                                         )}
 
@@ -698,39 +734,51 @@ export const PetCatalogPage: React.FC = () => {
                                             </span>
                                         </div>
 
-                                        <Input
-                                            label="Nombre Completo del Solicitante"
-                                            required
-                                            value={applicantName}
-                                            onChange={(e) => setApplicantName(e.target.value)}
-                                            placeholder="Nombres y Apellidos completos"
-                                        />
+                                        {!isAdopter && (
+                                            <>
+                                        {user ? (
+                                            <p className="rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-700">
+                                                Postulando como <strong className="text-gray-900">{user.name}</strong> ({user.email})
+                                            </p>
+                                        ) : (
+                                            <>
+                                                <Input
+                                                    label="Nombre Completo del Solicitante"
+                                                    required
+                                                    maxLength={50}
+                                                    value={applicantName}
+                                                    onChange={(e) => setApplicantName(e.target.value)}
+                                                    placeholder="Nombres y Apellidos completos"
+                                                />
+                                                <Input
+                                                    label="Correo Electrónico"
+                                                    type="email"
+                                                    required
+                                                    value={applicantEmail}
+                                                    onChange={(e) => setApplicantEmail(e.target.value)}
+                                                    placeholder="tu@correo.com"
+                                                />
+                                            </>
+                                        )}
 
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            <Input
-                                                label="Correo Electrónico"
-                                                type="email"
-                                                required
-                                                value={applicantEmail}
-                                                onChange={(e) => setApplicantEmail(e.target.value)}
-                                                placeholder="tu@correo.com"
-                                            />
-                                            <Input
-                                                label="Teléfono / WhatsApp"
-                                                required
-                                                value={applicantPhone}
-                                                onChange={(e) => setApplicantPhone(e.target.value)}
-                                                placeholder="Ej. 5555-1234"
-                                            />
-                                        </div>
+                                        <Input
+                                            label="Teléfono / WhatsApp"
+                                            required
+                                            value={applicantPhone}
+                                            onChange={(e) => setApplicantPhone(e.target.value)}
+                                            placeholder="Ej. 5555-1234"
+                                        />
 
                                         <Input
                                             label="Número de DPI / Documento de Identificación"
                                             required
+                                            maxLength={25}
                                             value={applicantDocument}
                                             onChange={(e) => setApplicantDocument(e.target.value)}
                                             placeholder="Ej. 2450 12345 0101 (13 dígitos)"
                                         />
+                                            </>
+                                        )}
 
                                         <div>
                                             <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">

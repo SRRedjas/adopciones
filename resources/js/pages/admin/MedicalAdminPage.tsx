@@ -5,9 +5,21 @@ import { Treatment, PetTreatment, Appointment, PetHistory } from '../../types/mo
 import { Column } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { api } from '../../api/client';
+import { useAuth } from '../../hooks/useAuth';
+
+type MedicalTab = 'treatments' | 'applied' | 'appointments' | 'history';
+
+const TABS: { id: MedicalTab; label: string; permission: string }[] = [
+    { id: 'treatments', label: 'Catálogo de Tratamientos', permission: 'manage_treatments' },
+    { id: 'applied', label: 'Tratamientos Aplicados', permission: 'manage_treatments' },
+    { id: 'appointments', label: 'Agenda de Citas', permission: 'manage_appointments' },
+    { id: 'history', label: 'Historial y Bitácora Médica', permission: 'manage_pets' },
+];
 
 export const MedicalAdminPage: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'treatments' | 'applied' | 'appointments' | 'history'>('treatments');
+    const { hasPermission } = useAuth();
+    const visibleTabs = TABS.filter((tab) => hasPermission(tab.permission));
+    const [activeTab, setActiveTab] = useState<MedicalTab>(visibleTabs[0]?.id ?? 'history');
 
     const [petOptions, setPetOptions] = useState([
         { value: 1, label: 'Max (Perro)' },
@@ -348,50 +360,20 @@ export const MedicalAdminPage: React.FC = () => {
 
                 {/* Tabs de Selección */}
                 <div className="flex border-b border-gray-200 overflow-x-auto touch-pan-x">
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('treatments')}
-                        className={`py-2.5 sm:py-3 px-3.5 sm:px-5 text-xs font-bold transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
-                            activeTab === 'treatments'
-                                ? 'border-[#006c49] text-[#006c49]'
-                                : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                        Catálogo de Tratamientos
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('applied')}
-                        className={`py-2.5 sm:py-3 px-3.5 sm:px-5 text-xs font-bold transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
-                            activeTab === 'applied'
-                                ? 'border-[#006c49] text-[#006c49]'
-                                : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                        Tratamientos Aplicados
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('appointments')}
-                        className={`py-2.5 sm:py-3 px-3.5 sm:px-5 text-xs font-bold transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
-                            activeTab === 'appointments'
-                                ? 'border-[#006c49] text-[#006c49]'
-                                : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                        Agenda de Citas
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('history')}
-                        className={`py-2.5 sm:py-3 px-3.5 sm:px-5 text-xs font-bold transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
-                            activeTab === 'history'
-                                ? 'border-[#006c49] text-[#006c49]'
-                                : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                        Historial y Bitácora Médica
-                    </button>
+                    {visibleTabs.map((tab) => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`py-2.5 sm:py-3 px-3.5 sm:px-5 text-xs font-bold transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+                                activeTab === tab.id
+                                    ? 'border-[#006c49] text-[#006c49]'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
 
                 {activeTab === 'treatments' && (

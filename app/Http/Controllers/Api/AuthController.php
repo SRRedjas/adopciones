@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,7 +30,7 @@ class AuthController extends Controller
 
         return response()->json([
             'token' => $user->createToken($credentials['device_name'] ?? 'api')->plainTextToken,
-            'user' => $user->load('roles'),
+            'user' => $this->profile($user),
         ]);
     }
 
@@ -48,14 +49,14 @@ class AuthController extends Controller
             'password' => $data['password'],
         ]);
 
-        $defaultRole = \App\Models\Role::query()->where('name', 'Voluntario')->first();
+        $defaultRole = Role::query()->where('name', Role::ADOPTER)->first();
         if ($defaultRole) {
             $user->roles()->syncWithoutDetaching([$defaultRole->id]);
         }
 
         return response()->json([
             'token' => $user->createToken($data['device_name'] ?? 'api')->plainTextToken,
-            'user' => $user->load('roles'),
+            'user' => $this->profile($user),
         ], 201);
     }
 
@@ -72,7 +73,17 @@ class AuthController extends Controller
 
     public function user(Request $request): JsonResponse
     {
-        return response()->json($request->user()?->load('roles'));
+        return response()->json($this->profile($request->user()));
+    }
+
+    /**
+     * The account with its roles and the permissions the SPA uses to show each module.
+     *
+     * @return array<string, mixed>
+     */
+    private function profile(User $user): array
+    {
+        return [...$user->load('roles')->toArray(), 'permissions' => $user->permissionNames()->values()];
     }
 }
 

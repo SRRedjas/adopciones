@@ -15,6 +15,8 @@ class PetHistory extends Model
     protected function casts(): array
     {
         return [
+            // sqlsrv returns foreign keys as strings
+            'user_id' => 'integer',
             'recorded_at' => 'date:Y-m-d',
         ];
     }

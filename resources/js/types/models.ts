@@ -17,6 +17,7 @@ export interface User {
     created_at?: string;
     updated_at?: string;
     roles?: Role[];
+    permissions?: string[];
 }
 
 export interface Role {
@@ -65,6 +66,7 @@ export interface Color {
 export interface PetStatus {
     id: number;
     name: string;
+    is_adoptable?: boolean;
     created_at?: string;
     updated_at?: string;
 }
@@ -260,13 +262,21 @@ export interface Adoption {
     delivered_at?: string;
     notes?: string;
     document?: string;
+    holds_pet?: boolean;
     user_id?: number;
     pet?: Pet;
     person?: Person;
     adoption_status?: AdoptionStatus;
+    next_statuses?: AdoptionStep[];
     user?: User;
     created_at?: string;
     updated_at?: string;
+}
+
+export interface AdoptionStep {
+    status: string;
+    label: string;
+    blocker: string | null;
 }
 
 export interface AdoptionFollowUp {

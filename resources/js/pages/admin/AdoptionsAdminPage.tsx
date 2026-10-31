@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppLayout } from '../../components/layout/AppLayout';
-import { ResourceCrudView, FieldConfig } from '../../components/crud/ResourceCrudView';
+import { ResourceCrudView, FieldConfig, FieldOption } from '../../components/crud/ResourceCrudView';
 import { Adoption } from '../../types/models';
 import { Column } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
@@ -9,40 +9,22 @@ import { ClipboardCheck } from 'lucide-react';
 import { api } from '../../api/client';
 
 export const AdoptionsAdminPage: React.FC = () => {
-    const [petOptions, setPetOptions] = useState([
-        { value: 1, label: 'Max (Perro / Mestizo)' },
-        { value: 2, label: 'Luna (Gato / Común)' },
-        { value: 3, label: 'Toby (Perro / Golden)' },
-        { value: 4, label: 'Rocky (Perro / Terrier)' },
-    ]);
-
-    const [personOptions, setPersonOptions] = useState([
-        { value: 1, label: 'Carlos Ruiz (carlos@correo.com)' },
-        { value: 2, label: 'María Fernanda Gómez (maria@correo.com)' },
-        { value: 3, label: 'Jorge Mendoza (jorge@correo.com)' },
-    ]);
-
-    const [statusOptions, setStatusOptions] = useState([
-        { value: 1, label: 'Pendiente' },
-        { value: 2, label: 'En revisión' },
-        { value: 3, label: 'Aprobada' },
-        { value: 4, label: 'Rechazada' },
-        { value: 5, label: 'Entregada' },
-        { value: 6, label: 'Cancelada' },
-    ]);
+    const [petOptions, setPetOptions] = useState<FieldOption[]>([]);
+    const [personOptions, setPersonOptions] = useState<FieldOption[]>([]);
+    const [pendingStatusId, setPendingStatusId] = useState<number | undefined>();
 
     useEffect(() => {
         const loadCatalogs = async () => {
             try {
                 const [pRes, peRes, stRes] = await Promise.allSettled([
-                    api.get('pets', { per_page: 50 }),
-                    api.get('people', { per_page: 50 }),
+                    api.get('pets', { per_page: 100, available: 1 }),
+                    api.get('people', { per_page: 100 }),
                     api.get('adoption-statuses'),
                 ]);
 
                 if (pRes.status === 'fulfilled' && pRes.value) {
                     const list = Array.isArray(pRes.value) ? pRes.value : pRes.value.data;
-                    if (Array.isArray(list) && list.length > 0) {
+                    if (Array.isArray(list)) {
                         setPetOptions(list.map((p: any) => ({
                             value: p.id,
                             label: `${p.name} (${p.species?.name || 'Mascota'})`,
@@ -52,7 +34,7 @@ export const AdoptionsAdminPage: React.FC = () => {
 
                 if (peRes.status === 'fulfilled' && peRes.value) {
                     const list = Array.isArray(peRes.value) ? peRes.value : peRes.value.data;
-                    if (Array.isArray(list) && list.length > 0) {
+                    if (Array.isArray(list)) {
                         setPersonOptions(list.map((pe: any) => ({
                             value: pe.id,
                             label: `${pe.name} (${pe.email || pe.document_number || 'ID ' + pe.id})`,
@@ -62,15 +44,12 @@ export const AdoptionsAdminPage: React.FC = () => {
 
                 if (stRes.status === 'fulfilled' && stRes.value) {
                     const list = Array.isArray(stRes.value) ? stRes.value : stRes.value.data;
-                    if (Array.isArray(list) && list.length > 0) {
-                        setStatusOptions(list.map((s: any) => ({
-                            value: s.id,
-                            label: s.name,
-                        })));
+                    if (Array.isArray(list)) {
+                        setPendingStatusId(list.find((s: any) => s.name === 'Pendiente')?.id);
                     }
                 }
             } catch (e) {
-                // Mantener fallbacks
+                // Los formularios quedan sin opciones y la tabla sigue disponible
             }
         };
 
@@ -129,13 +108,21 @@ export const AdoptionsAdminPage: React.FC = () => {
         },
     ];
 
+    // Solo mascotas elegibles, más la que ya tiene la adopción en edición.
+    const petOptionsFor = (_form: Record<string, any>, editing: Adoption | null): FieldOption[] => {
+        if (!editing || petOptions.some((option) => option.value === editing.pet_id)) return petOptions;
+
+        return [{ value: editing.pet_id, label: editing.pet?.name || `Mascota #${editing.pet_id}` }, ...petOptions];
+    };
+
+    // El estado y sus fechas solo cambian desde la evaluación de cada solicitud.
     const fields: FieldConfig[] = [
         {
             name: 'pet_id',
             label: 'Mascota Solicitada',
             type: 'select',
             required: true,
-            options: petOptions,
+            getOptions: petOptionsFor,
         },
         {
             name: 'person_id',
@@ -144,16 +131,7 @@ export const AdoptionsAdminPage: React.FC = () => {
             required: true,
             options: personOptions,
         },
-        {
-            name: 'adoption_status_id',
-            label: 'Estado de Adopción',
-            type: 'select',
-            required: true,
-            options: statusOptions,
-        },
         { name: 'requested_at', label: 'Fecha de Solicitud', type: 'date', required: true },
-        { name: 'approved_at', label: 'Fecha de Aprobación', type: 'date' },
-        { name: 'delivered_at', label: 'Fecha de Entrega', type: 'date' },
         { name: 'document', label: 'Identificador / Código de Documento', placeholder: 'DOC-2024-X' },
         { name: 'notes', label: 'Notas del proceso de adopción', type: 'textarea' },
     ];
@@ -162,7 +140,7 @@ export const AdoptionsAdminPage: React.FC = () => {
         ...data,
         pet_id: data.pet_id ? parseInt(String(data.pet_id), 10) : undefined,
         person_id: data.person_id ? parseInt(String(data.person_id), 10) : undefined,
-        adoption_status_id: data.adoption_status_id ? parseInt(String(data.adoption_status_id), 10) : undefined,
+        adoption_status_id: data.adoption_status_id ?? pendingStatusId,
     });
 
     return (

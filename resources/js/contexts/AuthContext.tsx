@@ -6,15 +6,39 @@ interface AuthContextType {
     user: User | null;
     token: string | null;
     isLoading: boolean;
-    login: (email: string, password: string, deviceName?: string) => Promise<void>;
-    register: (name: string, email: string, password: string, deviceName?: string) => Promise<void>;
+    login: (email: string, password: string, deviceName?: string) => Promise<User>;
+    register: (name: string, email: string, password: string, deviceName?: string) => Promise<User>;
     logout: () => Promise<void>;
     setUser: (user: User | null) => void;
     isAuthenticated: boolean;
     hasRole: (roleName: string) => boolean;
     hasAnyRole: (roleNames: string[]) => boolean;
+    hasPermission: (permission: string) => boolean;
+    hasAnyPermission: (permissions: string[]) => boolean;
     primaryRole: string;
+    homePath: string;
 }
+
+// Permisos de gestión: dan acceso al panel operativo.
+const STAFF_PERMISSIONS = [
+    'manage_pets',
+    'manage_adoptions',
+    'manage_appointments',
+    'manage_donations',
+    'manage_treatments',
+    'manage_rescues',
+    'manage_users',
+    'manage_catalogs',
+    'view_reports',
+];
+
+// Pantalla inicial según lo que la cuenta puede hacer.
+export const homePathFor = (user: User | null): string => {
+    const permissions = user?.permissions ?? [];
+    if (permissions.some((p) => STAFF_PERMISSIONS.includes(p))) return '/admin/dashboard';
+    if (permissions.includes('adopt')) return '/mis-solicitudes';
+    return '/catalog';
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -60,6 +84,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setAuthToken(response.token);
         setToken(response.token);
         setUser(response.user);
+        return response.user;
     };
 
     const register = async (name: string, email: string, password: string, deviceName = 'browser') => {
@@ -73,6 +98,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setAuthToken(response.token);
         setToken(response.token);
         setUser(response.user);
+        return response.user;
     };
 
     const logout = async () => {
@@ -98,6 +124,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return roleNames.some((r) => hasRole(r));
     };
 
+    const hasPermission = (permission: string): boolean => user?.permissions?.includes(permission) ?? false;
+
+    const hasAnyPermission = (permissions: string[]): boolean => permissions.some(hasPermission);
+
     const primaryRole = user?.roles && user.roles.length > 0 ? user.roles[0].name : 'Usuario';
 
     return (
@@ -113,7 +143,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 isAuthenticated: !!token && !!user,
                 hasRole,
                 hasAnyRole,
+                hasPermission,
+                hasAnyPermission,
                 primaryRole,
+                homePath: homePathFor(user),
             }}
         >
             {children}

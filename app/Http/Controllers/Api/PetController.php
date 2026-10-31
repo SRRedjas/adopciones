@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\Pet;
 use App\Models\PetStatus;
 use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -16,6 +17,13 @@ class PetController extends ResourceController
 
     /** @var list<string> */
     protected array $with = ['species', 'breed', 'color', 'petStatus', 'shelter', 'petTreatments.treatment'];
+
+    protected function filter(Builder $query, Request $request): void
+    {
+        if ($request->boolean('available')) {
+            $query->scopes('available');
+        }
+    }
 
     protected function rules(Request $request, ?Model $record): array
     {

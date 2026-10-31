@@ -4,10 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Adoption;
 use App\Models\AdoptionStatus;
+use App\Models\Person;
 use App\Models\Pet;
 use Closure;
+use DomainException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class AdoptionController extends ResourceController
 {
@@ -15,7 +21,7 @@ class AdoptionController extends ResourceController
     protected string $model = Adoption::class;
 
     /** @var list<string> */
-    protected array $with = ['pet', 'person', 'adoptionStatus', 'user'];
+    protected array $with = ['pet.species', 'pet.breed', 'pet.petStatus', 'person.residence', 'person.occupation', 'adoptionStatus', 'user'];
 
     protected function defaults(Request $request): array
     {
@@ -60,6 +66,64 @@ class AdoptionController extends ResourceController
         };
     }
 
+    public function show(string $id): JsonResponse
+    {
+        return response()->json($this->withWorkflow($this->findAdoption($id)));
+    }
+
+    /**
+     * Moves a request to the next status of the workflow, with the same checks as the staff panel.
+     */
+    public function transition(Request $request, string $id): JsonResponse
+    {
+        $data = $request->validate([
+            'status' => ['required', 'string'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $adoption = $this->findAdoption($id);
+
+        try {
+            DB::transaction(function () use ($adoption, $data) {
+                $adoption->moveTo($data['status']);
+
+                if (array_key_exists('notes', $data)) {
+                    $adoption->update(['notes' => $data['notes']]);
+                }
+            });
+        } catch (DomainException $e) {
+            throw ValidationException::withMessages(['status' => [$e->getMessage()]]);
+        }
+
+        return response()->json($this->withWorkflow($this->findAdoption($id)));
+    }
+
+    private function findAdoption(string $id): Adoption
+    {
+        /** @var Adoption */
+        return $this->find($id);
+    }
+
+    /**
+     * The adoption plus the steps available from its status and what blocks each one.
+     *
+     * @return array<string, mixed>
+     */
+    private function withWorkflow(Adoption $adoption): array
+    {
+        $steps = [];
+
+        foreach ($adoption->nextStatuses() as $status => $label) {
+            $steps[] = [
+                'status' => $status,
+                'label' => $label,
+                'blocker' => Adoption::blockerFor($status, $adoption->pet_id, $adoption->getKey()),
+            ];
+        }
+
+        return [...$adoption->toArray(), 'next_statuses' => $steps];
+    }
+
     /**
      * Same checks as the workflow; records that keep their status and pet are left as they are.
      */
@@ -69,6 +133,12 @@ class AdoptionController extends ResourceController
             $petId = $request->integer('pet_id') ?: $adoption?->pet_id;
             $unchanged = (int) $value === $adoption?->adoption_status_id && $petId === $adoption?->pet_id;
             $status = AdoptionStatus::query()->whereKey($value)->value('name');
+
+            if ($adoption !== null && (int) $value !== $adoption->adoption_status_id && ! array_key_exists($status, $adoption->nextStatuses())) {
+                $fail('La solicitud no admite ese cambio de estado.');
+
+                return;
+            }
 
             if (! $unchanged && $status !== null && ($blocker = Adoption::blockerFor($status, $petId, $adoption?->getKey())) !== null) {
                 $fail($blocker);
@@ -80,10 +150,10 @@ class AdoptionController extends ResourceController
     {
         $data = $request->validate([
             'pet_id' => ['required', 'integer', 'exists:pets,id', $this->petAdoptable(null)],
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255'],
+            'name' => ['required', 'string', 'max:50'],
+            'email' => ['required', 'email', 'max:150'],
             'phone' => ['nullable', 'string', 'max:50'],
-            'document_number' => ['nullable', 'string', 'max:50'],
+            'document_number' => ['nullable', 'string', 'max:25'],
             'notes' => ['nullable', 'string'],
         ]);
 
@@ -91,6 +161,15 @@ class AdoptionController extends ResourceController
             $defaultOccupationId = \App\Models\Occupation::query()->first()?->id ?? 1;
             $defaultResidenceId = \App\Models\Residence::query()->first()?->id ?? 1;
             $defaultUserId = $request->user()?->id ?? \App\Models\User::query()->first()?->id ?? 1;
+
+            $documentTaken = ! empty($data['document_number']) && Person::query()
+                ->where('document_number', $data['document_number'])
+                ->where('email', '!=', $data['email'])
+                ->exists();
+
+            if ($documentTaken) {
+                throw ValidationException::withMessages(['document_number' => ['Ese documento ya está registrado con otro correo.']]);
+            }
 
             $person = \App\Models\Person::query()->firstOrCreate(
                 ['email' => $data['email']],
@@ -107,7 +186,17 @@ class AdoptionController extends ResourceController
                 ]
             );
 
-            $statusId = \App\Models\AdoptionStatus::query()->first()?->id ?? 1;
+            $hasOpenRequest = Adoption::query()
+                ->where('pet_id', $data['pet_id'])
+                ->where('person_id', $person->id)
+                ->whereHas('adoptionStatus', fn (Builder $query) => $query->whereIn('name', AdoptionStatus::OPEN))
+                ->exists();
+
+            if ($hasOpenRequest) {
+                throw ValidationException::withMessages(['pet_id' => ['Ya tienes una solicitud en curso para esta mascota.']]);
+            }
+
+            $statusId = AdoptionStatus::query()->where('name', AdoptionStatus::PENDING)->value('id');
 
             $notes = ($data['notes'] ?? '');
             if (!empty($data['phone'])) {
@@ -130,24 +219,37 @@ class AdoptionController extends ResourceController
         });
     }
 
-    public function publicMyApplications(Request $request): \Illuminate\Http\JsonResponse
+    /**
+     * Status of the requests of a person, who proves it with both their email and document.
+     * Only the data of the process is returned: this endpoint is public.
+     */
+    public function publicMyApplications(Request $request): JsonResponse
     {
-        $search = trim($request->string('search'));
-
-        if (empty($search)) {
-            return response()->json([]);
-        }
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'document_number' => ['required', 'string', 'max:25'],
+        ]);
 
         $adoptions = Adoption::query()
-            ->with(['pet', 'person', 'adoptionStatus'])
-            ->whereHas('person', function ($q) use ($search) {
-                $q->where('email', $search)
-                  ->orWhere('document_number', $search);
-            })
+            ->with(['pet.breed', 'adoptionStatus'])
+            ->whereHas('person', fn (Builder $query) => $query
+                ->where('email', $data['email'])
+                ->where('document_number', $data['document_number']))
             ->orderByDesc('id')
-            ->get();
+            ->get()
+            ->map(fn (Adoption $adoption) => [
+                'id' => $adoption->id,
+                'requested_at' => $adoption->requested_at->toDateString(),
+                'approved_at' => $adoption->approved_at?->toDateString(),
+                'delivered_at' => $adoption->delivered_at?->toDateString(),
+                'adoption_status' => ['name' => $adoption->adoptionStatus?->name],
+                'pet' => [
+                    'name' => $adoption->pet?->name,
+                    'photo_url' => $adoption->pet?->photo_url,
+                    'breed' => ['name' => $adoption->pet?->breed?->name],
+                ],
+            ]);
 
         return response()->json($adoptions);
     }
 }
-

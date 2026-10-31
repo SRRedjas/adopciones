@@ -6,12 +6,21 @@ import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { Plus, Search, Trash2, Edit2, AlertCircle, Download, Building } from 'lucide-react';
 
+export interface FieldOption {
+    value: string | number;
+    label: string;
+}
+
 export interface FieldConfig {
     name: string;
     label: string;
     type?: 'text' | 'password' | 'number' | 'email' | 'date' | 'select' | 'checkbox' | 'textarea';
     required?: boolean;
-    options?: { value: string | number; label: string }[];
+    options?: FieldOption[];
+    // Opciones que dependen del formulario o del registro en edición
+    getOptions?: (form: Record<string, any>, editing: any | null) => FieldOption[];
+    // Campos que se vacían al cambiar este (p. ej. la raza al cambiar la especie)
+    resets?: string[];
     placeholder?: string;
     min?: number;
     max?: number;
@@ -91,8 +100,12 @@ export function ResourceCrudView<T extends { id: number }>({
         setIsModalOpen(true);
     };
 
-    const handleFieldChange = (name: string, value: any) => {
-        setFormData((prev) => ({ ...prev, [name]: value }));
+    const handleFieldChange = (name: string, value: any, resets: string[] = []) => {
+        setFormData((prev) => ({
+            ...prev,
+            ...Object.fromEntries(resets.map((field) => [field, ''])),
+            [name]: value,
+        }));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -371,6 +384,7 @@ export function ResourceCrudView<T extends { id: number }>({
                         {fields.map((f) => {
                             const err = formErrors[f.name]?.[0];
                             const val = formData[f.name] ?? '';
+                            const options = f.getOptions ? f.getOptions(formData, editingItem) : f.options;
 
                             if (f.type === 'select') {
                                 return (
@@ -381,11 +395,11 @@ export function ResourceCrudView<T extends { id: number }>({
                                         <select
                                             value={val}
                                             required={f.required}
-                                            onChange={(e) => handleFieldChange(f.name, e.target.value)}
+                                            onChange={(e) => handleFieldChange(f.name, e.target.value, f.resets)}
                                             className="w-full rounded border border-gray-300 p-2 text-xs focus:border-[#10b981] focus:ring-1 focus:ring-[#10b981]"
                                         >
                                             <option value="">{f.placeholder || 'Seleccione...'}</option>
-                                            {f.options?.map((opt) => (
+                                            {options?.map((opt) => (
                                                 <option key={opt.value} value={opt.value}>
                                                     {opt.label}
                                                 </option>

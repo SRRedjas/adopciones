@@ -32,7 +32,7 @@ class DonationController extends ResourceController
     public function publicDonate(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'donor_name' => ['required', 'string', 'max:100'],
+            'donor_name' => ['required', 'string', 'max:50'],
             'email' => ['required', 'email', 'max:150'],
             'amount' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'contribution_type' => ['required', 'in:cash,transfer,in_kind'],

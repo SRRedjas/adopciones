@@ -4,8 +4,11 @@ import { ResourceCrudView, FieldConfig } from '../../components/crud/ResourceCru
 import { Person, Occupation, Residence } from '../../types/models';
 import { Column } from '../../components/ui/Table';
 import { api } from '../../api/client';
+import { useAuth } from '../../hooks/useAuth';
 
 export const PeopleAdminPage: React.FC = () => {
+    const { hasPermission } = useAuth();
+    const canEditCatalogs = hasPermission('manage_catalogs');
     const [activeTab, setActiveTab] = useState<'people' | 'occupations' | 'residences'>('people');
 
     const [occupationOptions, setOccupationOptions] = useState<{ value: number; label: string }[]>([
@@ -234,6 +237,7 @@ export const PeopleAdminPage: React.FC = () => {
                         endpoint="occupations"
                         columns={occupationColumns}
                         fields={occupationFields}
+                        readOnly={!canEditCatalogs}
                     />
                 )}
 
@@ -244,6 +248,7 @@ export const PeopleAdminPage: React.FC = () => {
                         endpoint="residences"
                         columns={residenceColumns}
                         fields={residenceFields}
+                        readOnly={!canEditCatalogs}
                     />
                 )}
             </div>

@@ -5,6 +5,8 @@ import { LoginPage } from './pages/LoginPage';
 import { PetCatalogPage } from './pages/public/PetCatalogPage';
 import { PublicDonationsPage } from './pages/public/PublicDonationsPage';
 import { PublicMyApplicationsPage } from './pages/public/PublicMyApplicationsPage';
+import { AdopterRequestsPage } from './pages/adopter/AdopterRequestsPage';
+import { AdopterProfilePage } from './pages/adopter/AdopterProfilePage';
 import { DashboardPage } from './pages/admin/DashboardPage';
 import { ApplicationReviewPage } from './pages/admin/ApplicationReviewPage';
 import { PetsAdminPage } from './pages/admin/PetsAdminPage';
@@ -25,16 +27,16 @@ import { AccessDeniedPage } from './components/ui/AccessDeniedPage';
 // Guard para rutas protegidas de administración con verificación RBAC
 interface ProtectedAdminRouteProps {
     children: React.ReactNode;
-    allowedRoles?: string[];
+    requiredPermissions?: string[];
     moduleName?: string;
 }
 
 const ProtectedAdminRoute: React.FC<ProtectedAdminRouteProps> = ({
     children,
-    allowedRoles,
+    requiredPermissions,
     moduleName,
 }) => {
-    const { isAuthenticated, isLoading, hasAnyRole } = useAuth();
+    const { isAuthenticated, isLoading, hasAnyPermission } = useAuth();
 
     if (isLoading) {
         return (
@@ -48,8 +50,8 @@ const ProtectedAdminRoute: React.FC<ProtectedAdminRouteProps> = ({
         return <Navigate to="/login" replace />;
     }
 
-    if (allowedRoles && allowedRoles.length > 0 && !hasAnyRole(allowedRoles)) {
-        return <AccessDeniedPage requiredRoles={allowedRoles} moduleName={moduleName} />;
+    if (requiredPermissions && requiredPermissions.length > 0 && !hasAnyPermission(requiredPermissions)) {
+        return <AccessDeniedPage moduleName={moduleName} />;
     }
 
     return <>{children}</>;
@@ -70,6 +72,24 @@ export const ShelterApp: React.FC = () => {
                         <Route path="/public/donations" element={<PublicDonationsPage />} />
                         <Route path="/public/my-applications" element={<PublicMyApplicationsPage />} />
 
+                        {/* Área del adoptante */}
+                        <Route
+                            path="/mis-solicitudes"
+                            element={
+                                <ProtectedAdminRoute requiredPermissions={['adopt']} moduleName="Mis Solicitudes">
+                                    <AdopterRequestsPage />
+                                </ProtectedAdminRoute>
+                            }
+                        />
+                        <Route
+                            path="/mi-perfil"
+                            element={
+                                <ProtectedAdminRoute requiredPermissions={['adopt']} moduleName="Mi Perfil de Adoptante">
+                                    <AdopterProfilePage />
+                                </ProtectedAdminRoute>
+                            }
+                        />
+
                         {/* Alias directos y atajos de navegación */}
                         <Route path="/pets" element={<Navigate to="/admin/pets" replace />} />
                         <Route path="/rescues" element={<Navigate to="/admin/rescues" replace />} />
@@ -87,7 +107,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/dashboard"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador', 'Veterinario', 'Recepcionista', 'Voluntario']}
+                                    requiredPermissions={['manage_pets', 'manage_adoptions', 'manage_appointments', 'manage_donations', 'manage_treatments', 'manage_rescues', 'manage_users', 'manage_catalogs', 'view_reports']}
                                     moduleName="Dashboard Principal"
                                 >
                                     <DashboardPage />
@@ -99,7 +119,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/pets"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador', 'Veterinario', 'Recepcionista', 'Voluntario']}
+                                    requiredPermissions={['manage_pets']}
                                     moduleName="Catálogo de Mascotas"
                                 >
                                     <PetsAdminPage />
@@ -111,7 +131,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/rescues"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador', 'Veterinario', 'Voluntario']}
+                                    requiredPermissions={['manage_rescues']}
                                     moduleName="Rescates y Entradas"
                                 >
                                     <RescuesAdminPage />
@@ -123,7 +143,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/medical"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador', 'Veterinario', 'Recepcionista']}
+                                    requiredPermissions={['manage_treatments', 'manage_appointments', 'manage_pets']}
                                     moduleName="Registros Médicos y Citas"
                                 >
                                     <MedicalAdminPage />
@@ -135,7 +155,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/adoptions"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador', 'Recepcionista']}
+                                    requiredPermissions={['manage_adoptions']}
                                     moduleName="Solicitudes de Adopción"
                                 >
                                     <AdoptionsAdminPage />
@@ -147,7 +167,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/adoptions/eval/:id"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador', 'Recepcionista']}
+                                    requiredPermissions={['manage_adoptions']}
                                     moduleName="Evaluación Detallada de Adopción"
                                 >
                                     <ApplicationReviewPage />
@@ -159,7 +179,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/contracts"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador', 'Recepcionista']}
+                                    requiredPermissions={['manage_adoptions']}
                                     moduleName="Contratos de Adopción"
                                 >
                                     <ContractsAdminPage />
@@ -171,7 +191,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/follow-ups"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador', 'Veterinario', 'Voluntario']}
+                                    requiredPermissions={['manage_adoptions']}
                                     moduleName="Supervisión Post-Adopción"
                                 >
                                     <FollowUpsAdminPage />
@@ -183,7 +203,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/donations"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador', 'Recepcionista']}
+                                    requiredPermissions={['manage_donations']}
                                     moduleName="Donaciones y Donantes"
                                 >
                                     <DonationsAdminPage />
@@ -195,7 +215,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/people"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador', 'Recepcionista']}
+                                    requiredPermissions={['manage_adoptions']}
                                     moduleName="Padrón de Personas"
                                 >
                                     <PeopleAdminPage />
@@ -207,7 +227,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/shelters"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador']}
+                                    requiredPermissions={['manage_catalogs']}
                                     moduleName="Gestión de Refugios y Sedes"
                                 >
                                     <SheltersAdminPage />
@@ -219,7 +239,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/users"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador']}
+                                    requiredPermissions={['manage_users']}
                                     moduleName="Control de Usuarios y Permisos"
                                 >
                                     <UsersAdminPage />
@@ -231,7 +251,7 @@ export const ShelterApp: React.FC = () => {
                             path="/admin/settings"
                             element={
                                 <ProtectedAdminRoute
-                                    allowedRoles={['Administrador']}
+                                    requiredPermissions={['manage_catalogs']}
                                     moduleName="Configuraciones del Sistema"
                                 >
                                     <SettingsAdminPage />

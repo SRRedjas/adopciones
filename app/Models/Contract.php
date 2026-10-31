@@ -10,6 +10,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Contract extends Model
 {
     /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        // sqlsrv returns foreign keys as strings and the React panel compares them strictly
+        return ['adoption_id' => 'integer'];
+    }
+
+    /**
      * @return BelongsTo<User, $this>
      */
     public function user(): BelongsTo

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthLayout } from '../components/layout/AuthLayout';
 import { useAuth } from '../hooks/useAuth';
+import { homePathFor } from '../contexts/AuthContext';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
@@ -40,11 +41,10 @@ export const LoginPage: React.FC = () => {
                 if (!name.trim()) {
                     throw new Error('Por favor ingrese su nombre completo.');
                 }
-                await register(name, email, password);
+                navigate(homePathFor(await register(name, email, password)));
             } else {
-                await login(email, password);
+                navigate(homePathFor(await login(email, password)));
             }
-            navigate('/admin/dashboard');
         } catch (err: any) {
             setError(err?.message || 'Error de autenticación. Comprueba tus datos.');
         } finally {

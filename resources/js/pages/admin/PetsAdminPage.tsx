@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { AppLayout } from '../../components/layout/AppLayout';
-import { ResourceCrudView, FieldConfig } from '../../components/crud/ResourceCrudView';
-import { Pet } from '../../types/models';
+import { ResourceCrudView, FieldConfig, FieldOption } from '../../components/crud/ResourceCrudView';
+import { Breed, Pet } from '../../types/models';
 import { Column } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { api } from '../../api/client';
+
+// Estos estados los asigna el flujo de solicitudes de adopción, nunca el formulario.
+const WORKFLOW_STATUSES = ['Reservado', 'Adoptado'];
 
 export const PetsAdminPage: React.FC = () => {
     const [speciesOptions, setSpeciesOptions] = useState([
@@ -15,19 +18,7 @@ export const PetsAdminPage: React.FC = () => {
         { value: 5, label: 'Reptil' },
     ]);
 
-    const [breedOptions, setBreedOptions] = useState([
-        { value: 1, label: 'Mestizo (Perro)' },
-        { value: 2, label: 'Labrador (Perro)' },
-        { value: 3, label: 'Pastor Alemán (Perro)' },
-        { value: 4, label: 'Poodle (Perro)' },
-        { value: 5, label: 'Chihuahua (Perro)' },
-        { value: 6, label: 'Mestizo (Gato)' },
-        { value: 7, label: 'Siamés (Gato)' },
-        { value: 8, label: 'Persa (Gato)' },
-        { value: 9, label: 'Angora (Gato)' },
-        { value: 10, label: 'Canario (Ave)' },
-        { value: 11, label: 'Periquito (Ave)' },
-    ]);
+    const [breeds, setBreeds] = useState<Breed[]>([]);
 
     const [colorOptions, setColorOptions] = useState([
         { value: 1, label: 'Negro' },
@@ -62,7 +53,7 @@ export const PetsAdminPage: React.FC = () => {
             try {
                 const [sp, br, col, sh, st] = await Promise.allSettled([
                     api.get('species'),
-                    api.get('breeds'),
+                    api.get('breeds', { per_page: 100 }),
                     api.get('colors'),
                     api.get('shelters'),
                     api.get('pet-statuses'),
@@ -78,7 +69,7 @@ export const PetsAdminPage: React.FC = () => {
                 if (br.status === 'fulfilled' && br.value) {
                     const list = Array.isArray(br.value) ? br.value : br.value.data;
                     if (Array.isArray(list) && list.length > 0) {
-                        setBreedOptions(list.map((item: any) => ({ value: item.id, label: `${item.name} (${item.species?.name || 'Raza'})` })));
+                        setBreeds(list);
                     }
                 }
 
@@ -170,6 +161,18 @@ export const PetsAdminPage: React.FC = () => {
         },
     ];
 
+    // Solo las razas de la especie elegida: la API rechaza cualquier otra combinación.
+    const breedOptionsFor = (form: Record<string, any>): FieldOption[] =>
+        breeds
+            .filter((breed) => Number(breed.species_id) === Number(form.species_id))
+            .map((breed) => ({ value: breed.id, label: breed.name }));
+
+    // Un registro en edición conserva su estado aunque sea uno del flujo de adopción.
+    const statusOptionsFor = (_form: Record<string, any>, editing: Pet | null): FieldOption[] =>
+        statusOptions.filter(
+            (status) => !WORKFLOW_STATUSES.includes(status.label) || status.value === editing?.pet_status_id
+        );
+
     const fields: FieldConfig[] = [
         { name: 'name', label: 'Nombre de la Mascota', required: true, placeholder: 'Ej: Max' },
         {
@@ -188,13 +191,15 @@ export const PetsAdminPage: React.FC = () => {
             type: 'select',
             required: true,
             options: speciesOptions,
+            resets: ['breed_id'],
         },
         {
             name: 'breed_id',
             label: 'Raza',
             type: 'select',
             required: true,
-            options: breedOptions,
+            placeholder: 'Seleccione primero la especie...',
+            getOptions: breedOptionsFor,
         },
         {
             name: 'color_id',
@@ -215,7 +220,7 @@ export const PetsAdminPage: React.FC = () => {
             label: 'Estado de Disponibilidad',
             type: 'select',
             required: true,
-            options: statusOptions,
+            getOptions: statusOptionsFor,
         },
         { name: 'birth_date', label: 'Fecha de Nacimiento Estimada', type: 'date', required: true },
         { name: 'registered_at', label: 'Fecha de Ingreso al Refugio', type: 'date', required: true },

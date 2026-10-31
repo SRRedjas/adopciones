@@ -21,19 +21,20 @@ import { Input } from '../../components/ui/Input';
 import { Skeleton, SkeletonText } from '../../components/ui/Skeleton';
 import { api } from '../../api/client';
 import { LegalContractModal } from '../../components/contracts/LegalContractModal';
-import { Contract } from '../../types/models';
+import { Adoption, AdoptionStep, AppointmentType, Contract } from '../../types/models';
 
 export const ApplicationReviewPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
 
-    const [adoption, setAdoption] = useState<any>(null);
+    const [adoption, setAdoption] = useState<Adoption | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [evaluationType, setEvaluationType] = useState('Socioeconómica');
     const [score, setScore] = useState('85');
-    const [decision, setDecision] = useState<'approved' | 'rejected'>('approved');
     const [notes, setNotes] = useState('');
     const [isSaved, setIsSaved] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submittingStatus, setSubmittingStatus] = useState<string | null>(null);
+    const [decisionError, setDecisionError] = useState<string | null>(null);
+    const [deliveryTypeId, setDeliveryTypeId] = useState<number | undefined>();
 
     // Contrato vinculado y estado
     const [existingContract, setExistingContract] = useState<Contract | null>(null);
@@ -51,20 +52,21 @@ export const ApplicationReviewPage: React.FC = () => {
         if (!id) return;
         setIsLoading(true);
         try {
-            const [adopRes, contractsRes] = await Promise.allSettled([
-                api.get(`adoptions/${id}`),
+            const [adopRes, contractsRes, typesRes] = await Promise.allSettled([
+                api.get<Adoption>(`adoptions/${id}`),
                 api.get('contracts', { per_page: 100 }),
+                api.get('appointment-types', { per_page: 100 }),
             ]);
+
+            if (typesRes.status === 'fulfilled') {
+                const types: AppointmentType[] = typesRes.value?.data ?? [];
+                setDeliveryTypeId(types.find((type) => type.name === 'Revisión post-adopción')?.id);
+            }
 
             if (adopRes.status === 'fulfilled' && adopRes.value) {
                 const data = adopRes.value;
                 setAdoption(data);
-                setNotes(data.notes || 'El solicitante cuenta con vivienda apta y condiciones favorables para la adopción.');
-                if (data.adoption_status?.name?.toLowerCase().includes('rechaz')) {
-                    setDecision('rejected');
-                } else {
-                    setDecision('approved');
-                }
+                setNotes(data.notes || '');
             }
 
             if (contractsRes.status === 'fulfilled' && contractsRes.value) {
@@ -88,29 +90,26 @@ export const ApplicationReviewPage: React.FC = () => {
         loadData();
     }, [id]);
 
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSubmitting(true);
+    // El backend valida cada paso del flujo y sincroniza el estado de la mascota.
+    const handleTransition = async (step: AdoptionStep) => {
+        if (!id) return;
+
+        setSubmittingStatus(step.status);
+        setDecisionError(null);
+        setIsSaved(false);
         try {
-            if (id && adoption) {
-                const newStatusId = decision === 'approved' ? 3 : 4; // 3: Aprobada, 4: Rechazada
-                const updated = await api.put(`adoptions/${id}`, {
-                    pet_id: adoption.pet_id,
-                    person_id: adoption.person_id,
-                    requested_at: adoption.requested_at,
-                    approved_at: decision === 'approved' ? new Date().toISOString().split('T')[0] : null,
-                    adoption_status_id: newStatusId,
-                    notes: `${notes} [Dictamen: ${decision.toUpperCase()} - Puntaje: ${score}/100 - Tipo: ${evaluationType}]`,
-                });
-                setAdoption(updated);
-            }
+            const updated = await api.post<Adoption>(`adoptions/${id}/transition`, {
+                status: step.status,
+                notes: `${notes} [Dictamen: ${step.status} - Puntaje: ${score}/100 - Tipo: ${evaluationType}]`.trim(),
+            });
+            setAdoption(updated);
+            setNotes(updated.notes || '');
             setIsSaved(true);
             setTimeout(() => setIsSaved(false), 4000);
-        } catch {
-            setIsSaved(true);
-            setTimeout(() => setIsSaved(false), 4000);
+        } catch (err: any) {
+            setDecisionError(err?.message || 'No se pudo aplicar la decisión.');
         } finally {
-            setIsSubmitting(false);
+            setSubmittingStatus(null);
         }
     };
 
@@ -141,7 +140,7 @@ export const ApplicationReviewPage: React.FC = () => {
             await api.post('appointments', {
                 pet_id: adoption.pet_id,
                 person_id: adoption.person_id,
-                appointment_type_id: 4, // Revisión post-adopción / Entrega
+                appointment_type_id: deliveryTypeId,
                 appointment_date: appointmentDate,
                 notes: appointmentNotes,
                 status: 'pending',
@@ -224,6 +223,7 @@ export const ApplicationReviewPage: React.FC = () => {
     const applicantName = adoption?.person?.name || `Persona #${adoption?.person_id}`;
     const petName = adoption?.pet?.name || `Mascota #${adoption?.pet_id}`;
     const statusName = adoption?.adoption_status?.name || 'En Revisión';
+    const nextSteps = adoption?.next_statuses ?? [];
     const isApproved = statusName.toLowerCase().includes('aprob') || statusName.toLowerCase().includes('entreg');
     const solCode = `#SOL-${adoption?.id || id}`;
 
@@ -486,7 +486,7 @@ export const ApplicationReviewPage: React.FC = () => {
                         )}
 
                         {/* Formulario de Decisión */}
-                        <form onSubmit={handleSave} className="rounded-xl border border-gray-200 bg-white p-6 shadow-xs space-y-4">
+                        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-xs space-y-4">
                             <div className="flex items-center gap-2 border-b border-gray-100 pb-3 text-base font-bold text-gray-900">
                                 <ShieldCheck className="h-5 w-5 text-[#10b981]" />
                                 <span>Resolución del Comité Evaluador</span>
@@ -498,6 +498,18 @@ export const ApplicationReviewPage: React.FC = () => {
                                 </div>
                             )}
 
+                            {decisionError && (
+                                <div className="rounded bg-red-50 p-2.5 text-xs text-red-700 border border-red-200">
+                                    {decisionError}
+                                </div>
+                            )}
+
+                            {nextSteps.length === 0 ? (
+                                <p className="text-xs text-gray-600">
+                                    Esta solicitud está cerrada ({statusName}): ya no admite más cambios de estado.
+                                </p>
+                            ) : (
+                            <>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-700 mb-1">
@@ -530,39 +542,6 @@ export const ApplicationReviewPage: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                                    Resolución
-                                </label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => setDecision('approved')}
-                                        className={`flex items-center justify-center gap-2 rounded-md p-2.5 text-xs font-bold border transition-colors cursor-pointer ${
-                                            decision === 'approved'
-                                                ? 'bg-emerald-50 border-emerald-500 text-emerald-800'
-                                                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                                        <span>Aprobado</span>
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => setDecision('rejected')}
-                                        className={`flex items-center justify-center gap-2 rounded-md p-2.5 text-xs font-bold border transition-colors cursor-pointer ${
-                                            decision === 'rejected'
-                                                ? 'bg-red-50 border-red-500 text-red-800'
-                                                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        <XCircle className="h-4 w-4 text-red-600" />
-                                        <span>Rechazado</span>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div>
                                 <label className="block text-xs font-semibold text-gray-700 mb-1">
                                     Dictamen y Notas Oficiales
                                 </label>
@@ -574,10 +553,38 @@ export const ApplicationReviewPage: React.FC = () => {
                                 />
                             </div>
 
-                            <Button type="submit" isLoading={isSubmitting} className="w-full">
-                                Confirmar y Procesar Decisión
-                            </Button>
-                        </form>
+                            <div className="space-y-2">
+                                <p className="text-xs font-semibold text-gray-700">Resolución</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {nextSteps.map((step) => {
+                                        const isReject = step.status === 'Rechazada';
+
+                                        return (
+                                            <Button
+                                                key={step.status}
+                                                type="button"
+                                                variant={isReject ? 'outline' : 'primary'}
+                                                disabled={step.blocker !== null || submittingStatus !== null}
+                                                isLoading={submittingStatus === step.status}
+                                                title={step.blocker ?? undefined}
+                                                onClick={() => handleTransition(step)}
+                                                className="flex items-center justify-center gap-2 text-xs font-bold"
+                                            >
+                                                {isReject ? <XCircle className="h-4 w-4 text-red-600" /> : <CheckCircle2 className="h-4 w-4" />}
+                                                <span>{step.label}</span>
+                                            </Button>
+                                        );
+                                    })}
+                                </div>
+                                {nextSteps.filter((step) => step.blocker).map((step) => (
+                                    <p key={step.status} className="text-[11px] text-amber-700">
+                                        {step.label}: {step.blocker}
+                                    </p>
+                                ))}
+                            </div>
+                            </>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

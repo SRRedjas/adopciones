@@ -4,9 +4,11 @@ import { Heart, DollarSign, Package, ShieldCheck, CheckCircle2, AlertCircle, Spa
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { api } from '../../api/client';
+import { useAuth } from '../../hooks/useAuth';
 import { Pet } from '../../types/models';
 
 export const PublicDonationsPage: React.FC = () => {
+    const { user } = useAuth();
     const [donationType, setDonationType] = useState<'money' | 'items'>('money');
     const [selectedAmount, setSelectedAmount] = useState<number>(100);
     const [isCustomAmount, setIsCustomAmount] = useState<boolean>(false);
@@ -22,6 +24,10 @@ export const PublicDonationsPage: React.FC = () => {
     const [receiptCode, setReceiptCode] = useState('');
 
     const presetAmounts = [50, 100, 250, 500];
+
+    // Con sesión iniciada el donante es la cuenta: no se vuelven a pedir sus datos.
+    const effectiveName = user ? user.name.slice(0, 50) : donorName.trim();
+    const effectiveEmail = user ? user.email : donorEmail.trim();
 
     useEffect(() => {
         api.get('pets', { per_page: 30 })
@@ -56,8 +62,8 @@ export const PublicDonationsPage: React.FC = () => {
 
         try {
             const res = await api.post('public/donations', {
-                donor_name: donorName.trim(),
-                email: donorEmail.trim(),
+                donor_name: effectiveName,
+                email: effectiveEmail,
                 amount: finalAmount,
                 contribution_type: donationType === 'money' ? 'transfer' : 'in_kind',
                 notes: donationType === 'items' ? itemDescription.trim() : 'Donación monetaria vía portal web.',
@@ -119,7 +125,7 @@ export const PublicDonationsPage: React.FC = () => {
                                 Comprobante Oficial: {receiptCode}
                             </div>
                             <p className="text-sm text-gray-600 max-w-md mx-auto">
-                                Tu aporte ha sido registrado en la base de datos contable del refugio. Te hemos enviado un comprobante digital y la guía de recepción a <span className="font-semibold text-gray-800">{donorEmail || 'tu correo'}</span>.
+                                Tu aporte ha sido registrado en la base de datos contable del refugio. Te hemos enviado un comprobante digital y la guía de recepción a <span className="font-semibold text-gray-800">{effectiveEmail || 'tu correo'}</span>.
                             </p>
                             <Button
                                 onClick={() => {
@@ -260,6 +266,11 @@ export const PublicDonationsPage: React.FC = () => {
                             )}
 
                             {/* Datos del Donante */}
+                            {user ? (
+                                <p className="rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-700">
+                                    Donando como <strong className="text-gray-900">{user.name}</strong> ({user.email})
+                                </p>
+                            ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <Input
                                     label="Nombre Completo o Razón Social"
@@ -277,6 +288,7 @@ export const PublicDonationsPage: React.FC = () => {
                                     placeholder="tu@correo.com"
                                 />
                             </div>
+                            )}
 
                             <div className="flex items-center gap-2 text-xs text-gray-500">
                                 <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />

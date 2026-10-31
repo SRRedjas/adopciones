@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdopterController;
 use App\Http\Controllers\Api\AdoptionController;
 use App\Http\Controllers\Api\AdoptionFollowUpController;
 use App\Http\Controllers\Api\AdoptionStatusController;
@@ -46,12 +47,23 @@ Route::get('pet-statuses/{pet_status}', [PetStatusController::class, 'show']);
 Route::get('shelters', [ShelterController::class, 'index']);
 Route::get('shelters/{shelter}', [ShelterController::class, 'show']);
 Route::post('public/adoptions', [AdoptionController::class, 'publicApply']);
-Route::get('public/my-applications', [AdoptionController::class, 'publicMyApplications']);
+Route::get('public/my-applications', [AdoptionController::class, 'publicMyApplications'])->middleware('throttle:10,1');
 Route::post('public/donations', [DonationController::class, 'publicDonate']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('user', [AuthController::class, 'user']);
     Route::post('logout', [AuthController::class, 'logout']);
+
+    // Area del adoptante: solo opera sobre la persona vinculada a la cuenta.
+    Route::middleware('can:adopt')->prefix('my')->controller(AdopterController::class)->group(function () {
+        Route::get('adoptions', 'adoptions');
+        Route::post('adoptions', 'request');
+        Route::post('adoptions/{adoption}/cancel', 'cancel');
+        Route::get('profile', 'profile');
+        Route::put('profile', 'saveProfile');
+    });
+
+    Route::post('adoptions/{adoption}/transition', [AdoptionController::class, 'transition'])->middleware('can:manage_adoptions');
 
     Route::put('roles/{role}/permissions', [RoleController::class, 'syncPermissions'])->middleware('can:manage_users');
     Route::put('users/{user}/roles', [UserController::class, 'syncRoles'])->middleware('can:manage_users');
@@ -88,10 +100,17 @@ Route::middleware('auth:sanctum')->group(function () {
     // Recursos con catálogo público: index y show ya están registrados arriba sin autenticación.
     $publicCatalog = ['pets', 'species', 'breeds', 'colors', 'pet-statuses', 'shelters'];
 
+    // Catálogos que otros módulos usan en sus formularios: los lee cualquier cuenta, escribir exige el permiso.
+    $sharedCatalogs = ['adoption-statuses', 'occupations', 'residences', 'appointment-types', 'treatment-types'];
+
+    foreach ($sharedCatalogs as $slug) {
+        Route::apiResource($slug, $resources[$slug])->only(['index', 'show']);
+    }
+
     foreach ($resources as $slug => $controller) {
         $route = Route::apiResource($slug, $controller)->middleware('can:'.Modules::permission($slug));
 
-        if (in_array($slug, $publicCatalog, true)) {
+        if (in_array($slug, [...$publicCatalog, ...$sharedCatalogs], true)) {
             $route->except(['index', 'show']);
         }
 
